@@ -4,12 +4,13 @@ import fitz  # PyMuPDF للمعالجة الحقيقية
 from docx import Document
 import re
 import io
-from collections import Counter
+import tempfile
+import os
 
 # إعداد صفحة Streamlit
 st.set_page_config(
     page_title="مولد الامتحانات الذكي",
-    page_icon="📝",
+    page_icon="📝",f
     layout="wide"
 )
 
@@ -34,11 +35,6 @@ st.markdown("""
             border-radius: 10px;
             margin: 10px 0;
             border-right: 4px solid #667eea;
-            transition: transform 0.2s;
-        }
-        .question-card:hover {
-            transform: translateX(-5px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
         .level-badge {
             display: inline-block;
@@ -60,141 +56,120 @@ st.markdown("""
             background: #dc3545;
             color: white;
         }
-        .stats-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 15px;
-            border-radius: 10px;
-            color: white;
-            text-align: center;
-        }
     </style>
 """, unsafe_allow_html=True)
 
-# دالة محسنة لاستخراج الأسئلة من النص
+# دالة استخراج الأسئلة الحقيقية من النص
+ #yahya hamad
 def extract_questions_from_pdf(text):
     questions = []
+    # تقسيم النص بناءً على النقطة أو السطر الجديد أو الفاصلة المنقوطة
+    sentences = re.split(r'[.\n؛]', text)
+    count = 1
     
-    # تنظيف النص
-    text = text.replace('\n', ' ')
-    text = re.sub(r'\s+', ' ', text)
+    # كلمات مفتاحية تشير إلى محتوى تعليمي هام
+    key_words = ["يعرف", "تعد", "تعتبر", "يتكون", "هدف", "أهمية", "ميزة", "خصائص", "انواع"]
     
-    # قائمة الكلمات المفتاحية للعثور على جمل مهمة
-    keywords = [
-        'يعرف', 'يُعرف', 'يعتبر', 'هو', 'تعتبر', 'تتمثل', 'يتمثل',
-        'يتكون', 'يتضمن', 'يشمل', 'يتكون من', 'يحتوي',
-        'يهدف', 'تسعى', 'هدفها', 'مهمتها',
-        'يتميز', 'تتميز', 'خصائص', 'صفات',
-        'أنواع', 'أقسام', 'تصنيفات', 'تنقسم',
-        'أسباب', 'عوامل', 'مؤثرات',
-        'نتائج', 'آثار', 'تأثيرات',
-        'مراحل', 'خطوات', 'عمليات',
-        'أهمية', 'فوائد', 'مزايا',
-        'تحديات', 'مشاكل', 'صعوبات',
-        'استراتيجيات', 'أساليب', 'طرق', 'وسائل',
-        'مبادئ', 'أسس', 'قواعد'
-    ]
-    
-    # تقسيم النص إلى جمل
-    sentences = re.split(r'[.!?;:\n]', text)
-    
-    # إزالة الجمل الفارغة والقصيرة
-    sentences = [s.strip() for s in sentences if len(s.strip()) > 20]
-    
-    # استخراج الجمل المهمة
-    important_sentences = []
     for sentence in sentences:
-        # التحقق من وجود كلمات مفتاحية
-        has_keyword = any(keyword in sentence for keyword in keywords)
+        clean_text = sentence.strip()
         
-        # التحقق من طول الجملة
-        is_long_enough = len(sentence) > 30
-        
-        # التحقق من أنها ليست مجرد أرقام أو رموز
-        is_meaningful = len(re.findall(r'[أ-يa-zA-Z]', sentence)) > 10
-        
-        if (has_keyword or is_long_enough) and is_meaningful:
-            important_sentences.append(sentence)
-    
-    # إزالة التكرارات
-    important_sentences = list(dict.fromkeys(important_sentences))
-    
-    # تحويل الجمل المهمة إلى أسئلة
-    for i, sentence in enumerate(important_sentences[:50], 1):  # حد أقصى 50 سؤال
-        # تنظيف الجملة
-        sentence = sentence.strip()
-        
-        # تحويل الجملة إلى سؤال
-        question_text = sentence
-        
-        # إضافة علامة استفهام إذا لم تكن موجودة
-        if not question_text.endswith('؟'):
-            # محاولة تحويل الجملة إلى سؤال
-            if 'هو' in question_text or 'تعتبر' in question_text:
-                question_text = question_text.replace('هو', 'ما هو')
-                question_text = question_text.replace('تعتبر', 'ما هي')
-            elif 'يتميز' in question_text:
-                question_text = question_text.replace('يتميز', 'بماذا يتميز')
-            elif 'أهمية' in question_text:
-                question_text = question_text.replace('أهمية', 'ما أهمية')
-            elif 'أنواع' in question_text:
-                question_text = question_text.replace('أنواع', 'ما هي أنواع')
-            elif 'مراحل' in question_text:
-                question_text = question_text.replace('مراحل', 'ما هي مراحل')
-            elif 'أسباب' in question_text:
-                question_text = question_text.replace('أسباب', 'ما هي أسباب')
+        # خفضنا الحد الأدنى للحروف إلى 20 لضمان التقاط الجمل العربية
+        if len(clean_text) > 20:  
+            # التحقق مما إذا كانت الجملة مفيدة أو تحتوي على كلمة مفتاحية
+            is_educational = any(word in clean_text for word in key_words)
             
-            question_text += "؟"
-        
-        # تحديد مستوى الصعوبة
-        level = determine_difficulty_level(sentence)
-        
-        questions.append({
-            "id": i,
-            "level": level,
-            "text": question_text,
-            "original_sentence": sentence[:100] + "..." if len(sentence) > 100 else sentence
-        })
-    
-    # إذا لم يتم العثور على أسئلة، قم باستخراج جمل عشوائية
-    if len(questions) == 0:
-        for i, sentence in enumerate(sentences[:20], 1):
-            if len(sentence) > 30:
+            if is_educational or len(clean_text) > 60:
+                level = "بسيط"
+                if any(word in clean_text for word in ["بسبب", "بينما", "نتيجة", "اختلاف"]):
+                    level = "متوسط"
+                if any(word in clean_text for word in ["التحوط", "الاستراتيجي", "تحليل", "رؤية"]):
+                    level = "متقدم"
+                
+                # صياغة السؤال بشكل احترافي
+                question_text = clean_text
+                if not question_text.endswith('؟'):
+                    question_text += "؟"
+                
                 questions.append({
-                    "id": i,
-                    "level": "بسيط",
-                    "text": f"ما هي المعلومات الرئيسية حول: {sentence[:50]}...؟",
-                    "original_sentence": sentence[:100] + "..." if len(sentence) > 100 else sentence
+                    "id": count,
+                    "level": level,
+                    "text": question_text,
+                    "page": f"صفحة {count}"
                 })
+                count += 1
+                if count > 30: break
+                
+    return questions
+    questions = []
+    # تقسيم النص بناءً على النقطة أو السطر الجديد أو الفاصلة المنقوطة
+    sentences = re.split(r'[.\n؛]', text)
+    count = 1
     
+    # كلمات مفتاحية تشير إلى محتوى تعليمي هام
+    key_words = ["يعرف", "تعد", "تعتبر", "يتكون", "هدف", "أهمية", "ميزة", "خصائص", "انواع"]
+    
+    for sentence in sentences:
+        clean_text = sentence.strip()
+        
+        # خفضنا الحد الأدنى للحروف إلى 20 لضمان التقاط الجمل العربية
+        if len(clean_text) > 20:  
+            # التحقق مما إذا كانت الجملة مفيدة أو تحتوي على كلمة مفتاحية
+            is_educational = any(word in clean_text for word in key_words)
+            
+            if is_educational or len(clean_text) > 60:
+                level = "بسيط"
+                if any(word in clean_text for word in ["بسبب", "بينما", "نتيجة", "اختلاف"]):
+                    level = "متوسط"
+                if any(word in clean_text for word in ["التحوط", "الاستراتيجي", "تحليل", "رؤية"]):
+                    level = "متقدم"
+                
+                # صياغة السؤال بشكل احترافي
+                question_text = clean_text
+                if not question_text.endswith('؟'):
+                    question_text += "؟"
+                
+                questions.append({
+                    "id": count,
+                    "level": level,
+                    "text": question_text,
+                    "page": f"صفحة {count}"
+                })
+                count += 1
+                if count > 30: break
+                
     return questions
 
-# دالة تحديد مستوى الصعوبة
-def determine_difficulty_level(sentence):
-    # كلمات للمستوى المتقدم
-    advanced_keywords = [
-        'تحليل', 'تقييم', 'نقد', 'استراتيجي', 'معقد', 'نظريات',
-        'تطبيقات', 'مقارنة', 'التحوط', 'الاستراتيجي', 'متقدم'
-    ]
+    questions = []
+    # البحث عن الفقرات التي تحتوي على مفاهيم أساسية
+    sentences = re.split(r'[.\n]', text)
+    count = 1
     
-    # كلمات للمستوى المتوسط
-    medium_keywords = [
-        'بسبب', 'بينما', 'الفجوة', 'علاقة', 'تأثير', 'نتيجة',
-        'عوامل', 'مؤشرات', 'آليات', 'عمليات', 'مراحل'
-    ]
-    
-    # حساب عدد الكلمات المفتاحية
-    advanced_count = sum(1 for kw in advanced_keywords if kw in sentence)
-    medium_count = sum(1 for kw in medium_keywords if kw in sentence)
-    
-    # تحديد المستوى
-    if advanced_count >= 2:
-        return "متقدم"
-    elif advanced_count >= 1 or medium_count >= 2:
-        return "متوسط"
-    else:
-        return "بسيط"
+    for sentence in sentences:
+        if len(sentence.strip()) > 40:  # نختار الجمل الغنية بالمعلومات
+            # تحديد مستوى الصعوبة بناءً على الكلمات المفتاحية
+            level = "بسيط"
+            if "بسبب" in sentence or "بينما" in sentence or "الفجوة" in sentence:
+                level = "متوسط"
+            if "التحوط" in sentence or "الاستراتيجي" in sentence or "تحليل" in sentence:
+                level = "متقدم"
+            
+            # تنظيف النص
+            clean_text = sentence.strip()
+            if clean_text and not clean_text.endswith('؟'):
+                clean_text += "؟"
+            
+            questions.append({
+                "id": count,
+                "level": level,
+                "text": clean_text,
+                "page": f"صفحة {count}"
+            })
+            count += 1
+            if count > 30:  # نكتفي بـ 30 سؤالاً
+                break
+    return questions
 
-# دالة استخراج النص من PDF مع معالجة أفضل
+# دالة استخراج النص من PDF
 def extract_text_from_pdf(uploaded_file):
     try:
         # قراءة محتوى الملف
@@ -203,37 +178,16 @@ def extract_text_from_pdf(uploaded_file):
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
         
         full_text = ""
-        pages_text = []
-        
-        # استخراج النص من كل صفحة
-        for page_num in range(len(doc)):
-            page = doc[page_num]
+        for page_num, page in enumerate(doc, 1):
             page_text = page.get_text()
-            
-            # تنظيف النص
-            page_text = page_text.replace('\n', ' ')
-            page_text = re.sub(r'\s+', ' ', page_text)
-            
-            pages_text.append({
-                'number': page_num + 1,
-                'text': page_text
-            })
-            
-            full_text += f"\n--- صفحة {page_num + 1} ---\n{page_text}"
+            full_text += f"\n--- صفحة {page_num} ---\n{page_text}"
         
-        # إحصائيات عن الملف
-        stats = {
-            'total_pages': len(doc),
-            'total_chars': len(full_text),
-            'pages_text': pages_text
-        }
-        
-        return full_text, stats
+        return full_text
     except Exception as e:
         st.error(f"حدث خطأ في معالجة ملف PDF: {str(e)}")
-        return None, None
+        return None
 
-# دالة تصدير الأسئلة إلى Word مع تنسيق أفضل
+# دالة تصدير الأسئلة إلى Word
 def export_to_word(questions):
     try:
         doc = Document()
@@ -309,55 +263,27 @@ def main():
             help="قم برفع ملف PDF لاستخراج الأسئلة منه"
         )
         
-        # إضافة خيارات متقدمة
-        with st.expander("⚙️ خيارات متقدمة"):
-            max_questions = st.slider("الحد الأقصى لعدد الأسئلة", 5, 50, 30)
-            difficulty_filter = st.multiselect(
-                "مستويات الصعوبة",
-                ["بسيط", "متوسط", "متقدم"],
-                default=["بسيط", "متوسط", "متقدم"]
-            )
-        
         if uploaded_file:
             st.success(f"✅ تم رفع الملف: {uploaded_file.name}")
-            
-            # عرض معلومات الملف
-            file_details = {
-                "اسم الملف": uploaded_file.name,
-                "نوع الملف": uploaded_file.type,
-                "الحجم": f"{uploaded_file.size / 1024:.2f} KB"
-            }
-            st.json(file_details)
             
             # زر لبدء المعالجة
             if st.button("🚀 استخراج الأسئلة", type="primary", use_container_width=True):
                 with st.spinner("جاري معالجة الملف واستخراج الأسئلة..."):
                     # استخراج النص من PDF
-                    full_text, stats = extract_text_from_pdf(uploaded_file)
+                    full_text = extract_text_from_pdf(uploaded_file)
                     
-                    if full_text and stats:
-                        # عرض إحصائيات الملف
-                        st.info(f"📊 تم استخراج {stats['total_pages']} صفحة، {stats['total_chars']} حرف")
-                        
+                    if full_text:
                         # استخراج الأسئلة
-                        all_questions = extract_questions_from_pdf(full_text)
-                        
-                        # تطبيق الفلتر حسب المستوى
-                        questions = [q for q in all_questions if q['level'] in difficulty_filter]
-                        questions = questions[:max_questions]
+                        questions = extract_questions_from_pdf(full_text)
                         
                         if questions:
                             # حفظ الأسئلة في session state
                             st.session_state.questions = questions
                             st.session_state.full_text = full_text
-                            st.session_state.stats = stats
                             st.success(f"✅ تم استخراج {len(questions)} سؤالاً بنجاح!")
                             st.balloons()
                         else:
                             st.warning("⚠️ لم يتم العثور على أسئلة في الملف. حاول رفع ملف آخر.")
-                            # عرض جزء من النص للمساعدة في التشخيص
-                            with st.expander("🔍 معاينة النص المستخرج"):
-                                st.text(full_text[:500])
     
     with col2:
         st.markdown("### 📋 الأسئلة المستخرجة")
@@ -367,24 +293,21 @@ def main():
             questions = st.session_state.questions
             
             # إحصائيات سريعة
-            levels_count = {}
+            levels = {}
             for q in questions:
                 level = q['level']
-                levels_count[level] = levels_count.get(level, 0) + 1
+                levels[level] = levels.get(level, 0) + 1
             
-            # عرض الإحصائيات
-            col_stats1, col_stats2, col_stats3, col_stats4 = st.columns(4)
+            col_stats1, col_stats2, col_stats3 = st.columns(3)
             with col_stats1:
-                st.metric("📊 إجمالي الأسئلة", len(questions))
+                st.metric("إجمالي الأسئلة", len(questions))
             with col_stats2:
-                st.metric("🟢 بسيط", levels_count.get('بسيط', 0))
+                st.metric("أسئلة بسيطة", levels.get('بسيط', 0))
             with col_stats3:
-                st.metric("🟡 متوسط", levels_count.get('متوسط', 0))
-            with col_stats4:
-                st.metric("🔴 متقدم", levels_count.get('متقدم', 0))
+                st.metric("أسئلة متوسطة/متقدمة", levels.get('متوسط', 0) + levels.get('متقدم', 0))
             
             # عرض الأسئلة في tab
-            tab1, tab2, tab3 = st.tabs(["📝 عرض الأسئلة", "🔧 خيارات التصدير", "📊 إحصائيات"])
+            tab1, tab2 = st.tabs(["📝 عرض الأسئلة", "🔧 خيارات التصدير"])
             
             with tab1:
                 # فلتر حسب المستوى
@@ -405,11 +328,7 @@ def main():
                                     <span class="level-badge {level_class}">{q['level']}</span>
                                     <strong>السؤال {q['id']}:</strong>
                                 </div>
-                                <p style="margin-top: 10px; font-size: 16px;">{q['text']}</p>
-                                <details style="margin-top: 10px; font-size: 12px; color: #666;">
-                                    <summary>معاينة النص الأصلي</summary>
-                                    <p>{q.get('original_sentence', '')}</p>
-                                </details>
+                                <p style="margin-top: 10px;">{q['text']}</p>
                             </div>
                         """, unsafe_allow_html=True)
             
@@ -440,30 +359,14 @@ def main():
                             label="📥 تحميل ملف نصي",
                             data=text_content,
                             file_name="الامتحان_المستخرج.txt",
-                            mime="text/plain",
+                                    mime="text/plain",
                             use_container_width=True
                         )
-            
-            with tab3:
-                st.markdown("#### 📊 إحصائيات وتحليلات")
                 
-                # توزيع الأسئلة حسب المستوى
-                levels_data = {
-                    'بسيط': levels_count.get('بسيط', 0),
-                    'متوسط': levels_count.get('متوسط', 0),
-                    'متقدم': levels_count.get('متقدم', 0)
-                }
-                st.bar_chart(levels_data)
-                
-                # معلومات عن الملف
-                if 'stats' in st.session_state:
-                    st.markdown("#### 📄 معلومات الملف")
-                    st.write(f"- عدد الصفحات: {st.session_state.stats['total_pages']}")
-                    st.write(f"- عدد الأحرف: {st.session_state.stats['total_chars']:,}")
-                
-                # معاينة النص الكامل
-                with st.expander("📄 عرض النص الكامل المستخرج"):
-                    st.text_area("النص الكامل:", st.session_state.full_text, height=300, disabled=True)
+                # عرض معاينة النص الأصلي
+                with st.expander("📄 معاينة النص المستخرج من PDF"):
+                    if 'full_text' in st.session_state:
+                        st.text_area("النص الأصلي:", st.session_state.full_text, height=200, disabled=True)
         else:
             st.info("💡 قم برفع ملف PDF واضغط على زر 'استخراج الأسئلة' لعرض الأسئلة هنا")
     
@@ -473,36 +376,29 @@ def main():
         st.markdown("""
         **كيف يعمل التطبيق؟**
         
-        1. **استخراج النص**: يقوم التطبيق باستخراج النص من ملف PDF
-        2. **تحليل المحتوى**: يبحث عن الجمل الغنية بالمعلومات والكلمات المفتاحية
-        3. **تحويل إلى أسئلة**: يحول الجمل المهمة إلى أسئلة تعليمية
-        4. **تصنيف المستوى**: يصنف الأسئلة حسب الصعوبة
+        1. قم برفع ملف PDF (كتاب، محاضرة، أو أي نص تعليمي)
+        2. يقوم التطبيق باستخراج النص وتحليله
+        3. يتم تحويل الجمل الغنية بالمعلومات إلى أسئلة
+        4. يتم تصنيف الأسئلة حسب مستوى الصعوبة
         
         **مستويات الصعوبة:**
-        - 🟢 **بسيط**: أسئلة أساسية عن التعريفات والمفاهيم
-        - 🟡 **متوسط**: أسئلة عن الأسباب والنتائج والعلاقات
-        - 🔴 **متقدم**: أسئلة تحليلية واستراتيجية معقدة
+        - 🟢 **بسيط**: أسئلة أساسية ومباشرة
+        - 🟡 **متوسط**: أسئلة تحتاج إلى فهم وتحليل
+        - 🔴 **متقدم**: أسئلة معقدة تتطلب تفكير عميق
         
-        **الكلمات المفتاحية التي يبحث عنها:**
-        - التعريفات: يعرف، هو، تعتبر
-        - المحتوى: يتكون، يشمل، يحتوي
-        - الأهداف: يهدف، تسعى
-        - التصنيفات: أنواع، أقسام
-        - التحليل: أسباب، نتائج، تأثيرات
-        
-        **نصائح للحصول على أفضل النتائج:**
-        - استخدم ملفات PDF نصية (غير ممسوحة ضوئياً)
-        - كلما كان المحتوى أكثر تنظيماً، كانت الأسئلة أفضل
-        - يمكن تعديل عدد الأسئلة في الخيارات المتقدمة
+        **ملاحظات:**
+        - يعمل التطبيق مع ملفات PDF النصية (غير الممسوحة ضوئياً)
+        - كلما كان النص غنياً بالمعلومات، كانت الأسئلة أفضل
+        - يمكن تصدير الأسئلة إلى Word أو ملف نصي
         """)
         
         st.markdown("---")
-        st.markdown("### 🛠️ التقنيات المستخدمة")
+        st.markdown("### 🛠️ تقنيات مستخدمة")
         st.markdown("""
-        - **Streamlit**: واجهة المستخدم التفاعلية
-        - **PyMuPDF**: معالجة واستخراج النص من PDF
-        - **python-docx**: إنشاء ملفات Word
-        - **تعبيرات منتظمة (Regex)**: تحليل النص والبحث عن الأنماط
+        - **Streamlit**: واجهة المستخدم
+        - **PyMuPDF**: معالجة PDF
+        - **python-docx**: تصدير Word
+        - **تعبير منتظم**: تحليل النص
         """)
 
 if __name__ == "__main__":
