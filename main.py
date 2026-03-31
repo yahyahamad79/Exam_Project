@@ -1,18 +1,15 @@
- # main.py - نسخة Streamlit
-import streamlit as st
-import fitz  # PyMuPDF
+ import streamlit as st
+import fitz
 from docx import Document
-from typing import List
 import re
 import os
+import tempfile
 
-# إعداد الصفحة
 st.set_page_config(page_title="مولد أسئلة الامتحانات", page_icon="📝")
 
 st.title("📝 نظام استخراج الأسئلة من PDF")
 st.markdown("قم برفع ملف PDF لاستخراج الأسئلة وتصديرها كملف Word")
 
-# دالة استخراج الأسئلة من النص
 def extract_questions_from_pdf(text):
     questions = []
     sentences = re.split(r'[.\n]', text)
@@ -38,7 +35,6 @@ def extract_questions_from_pdf(text):
     
     return questions
 
-# دالة إنشاء ملف Word
 def create_word_document(questions):
     doc = Document()
     doc.add_heading('امتحان مادة الإدارة - الوحدة الثالثة (مستخرج حقيقي)', 0)
@@ -49,17 +45,15 @@ def create_word_document(questions):
         p.add_run(f"{q['text']}")
         doc.add_paragraph("......................................................................")
     
-    file_path = "final_exam.docx"
-    doc.save(file_path)
-    return file_path
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.docx')
+    doc.save(temp_file.name)
+    return temp_file.name
 
-# رفع الملف
 uploaded_file = st.file_uploader("اختر ملف PDF", type=["pdf"])
 
 if uploaded_file is not None:
     st.success("✅ تم رفع الملف بنجاح")
     
-    # قراءة محتوى PDF
     content = uploaded_file.read()
     doc = fitz.open(stream=content, filetype="pdf")
     
@@ -68,23 +62,19 @@ if uploaded_file is not None:
         full_text += page.get_text()
     
     st.info(f"📄 عدد الصفحات: {len(doc)}")
-    st.text_area("معاينة النص المستخرج", full_text[:500] + "...", height=150)
     
-    # استخراج الأسئلة
     if st.button("🔍 استخراج الأسئلة"):
         with st.spinner("جاري المعالجة..."):
             questions = extract_questions_from_pdf(full_text)
             st.session_state.questions = questions
             st.success(f"✅ تم استخراج {len(questions)} سؤال")
     
-    # عرض الأسئلة
     if 'questions' in st.session_state:
         st.subheader("📋 الأسئلة المستخرجة")
         for q in st.session_state.questions:
             with st.expander(f"سؤال {q['id']} - {q['level']}"):
                 st.write(q['text'])
         
-        # زر التصدير
         if st.button("📥 تصدير كملف Word"):
             file_path = create_word_document(st.session_state.questions)
             
@@ -96,11 +86,9 @@ if uploaded_file is not None:
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
             
-            # تنظيف الملف المؤقت
             os.remove(file_path)
 else:
     st.warning("⚠️ يرجى رفع ملف PDF للبدء")
 
-# تذييل الصفحة
 st.markdown("---")
 st.markdown("© 2024 نظام استخراج الأسئلة | البروتوكول 2.0")
