@@ -1,8 +1,12 @@
- import streamlit as st
-import fitz  # PyMuPDF
+# main.py
+import streamlit as st
+import fitz  # PyMuPDF للمعالجة الحقيقية
 from docx import Document
 import re
 import io
+import tempfile
+import os
+
 
 # 1. إعدادات الصفحة (يجب أن يكون هذا أول أمر برمي)
 st.set_page_config(
