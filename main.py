@@ -10,7 +10,7 @@ import re
 
 app = FastAPI()
 
-# تأكد أن كل الأسطر التالية تبدأ من أقصى اليسار أو تتبع إزاحة منطقية
+# إعدادات السماح بالاتصال (CORS)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,4 +18,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# بقية الكود...
+# بقية الكود الخاص بالمعالجة...
+@app.get("/")
+def read_root():
+    return {"status": "الخدمة تعمل بنجاح"}
