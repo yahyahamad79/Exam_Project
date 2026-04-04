@@ -1,4 +1,5 @@
 # main.py
+#yahya hamad
 import streamlit as st
 import fitz  # PyMuPDF للمعالجة الحقيقية
 from docx import Document
